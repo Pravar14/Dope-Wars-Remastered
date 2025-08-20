@@ -7,7 +7,7 @@ Play it instantly in your browser — no downloads required.
 
 ## 🎮 Play Now
 
-👉 [Play Dope Wars on GitHub Pages](https://your-username.github.io/dope-wars-html/)  
+👉 [Play Dope Wars on GitHub Pages](https://pravar14.github.io/Dope-Wars-Remastered/)  
 
 ---
 
