@@ -163,7 +163,7 @@
         }
         
         .modal-content h2 { margin-top: 0; font-size: 2.5rem; }
-        .modal-content p { margin-bottom: 20px; line-height: 1.5; }
+        .modal-content p { margin-bottom: 20px; line-height: 1.5; text-align: left; }
         
         .modal-button {
             background-color: transparent;
@@ -255,6 +255,7 @@
         <span id="status-health"></span> <span id="status-cash"></span>
         <span id="status-bank"></span> <span id="status-debt"></span>
         <span id="status-coat"></span> <span id="status-guns"></span>
+        <span id="status-gang"></span>
     </div>
 
     <div class="main-content">
@@ -304,29 +305,19 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
-    const CONFIG = {
-        MAX_DAYS: 30, INITIAL_CASH: 2000, INITIAL_DEBT: 5500,
-        INITIAL_HEALTH: 100, TRENCH_COAT_CAPACITY: 100,
-        DEBT_INTEREST_RATE: 0.1, EVENT_CHANCE: 0.85,
-        HEAL_COST_PER_HP: 50,
+    const CONFIG = { MAX_DAYS: 30, INITIAL_CASH: 2000, INITIAL_DEBT: 5500, INITIAL_HEALTH: 100, TRENCH_COAT_CAPACITY: 100, DEBT_INTEREST_RATE: 0.1, EVENT_CHANCE: 0.9, HEAL_COST_PER_HP: 50, };
+    const GUNS = { ".38 Special": { price: 800, minDamage: 25, maxDamage: 35, accuracy: 0.9 }, "Shotgun": { price: 2500, minDamage: 30, maxDamage: 50, accuracy: 0.75 }, "AK-47": { price: 7500, minDamage: 35, maxDamage: 45, accuracy: 0.8, headshotChance: 0.2 }, };
+    const WALLETS = { "Standard Wallet": { capacity: 20000, price: 0 }, "Fanny Pack": { capacity: 50000, price: 1000 }, "Money Belt": { capacity: 150000, price: 5000 }, "Briefcase": { capacity: 500000, price: 20000 }, };
+    const LOCATIONS = {
+        "Manhattan":    { turf: "Stilettos", risk: 0.6 },
+        "The Bronx":    { turf: "None", risk: 0.4 },
+        "Brooklyn":     { turf: "None", risk: 0.4 },
+        "Ghetto":       { turf: "Breakers", risk: 0.7 },
+        "Queens":       { turf: "None", risk: 0.2 },
+        "Coney Island": { turf: "None", risk: 0.5 },
     };
-    const GUNS = {
-        ".38 Special": { price: 800, minDamage: 25, maxDamage: 35, accuracy: 0.9 },
-        "Shotgun":     { price: 2500, minDamage: 30, maxDamage: 50, accuracy: 0.75 },
-        "AK-47":       { price: 7500, minDamage: 35, maxDamage: 45, accuracy: 0.8, headshotChance: 0.2 },
-    };
-    const WALLETS = {
-        "Standard Wallet": { capacity: 20000, price: 0 },
-        "Fanny Pack":      { capacity: 50000, price: 1000 },
-        "Money Belt":      { capacity: 150000, price: 5000 },
-        "Briefcase":       { capacity: 500000, price: 20000 },
-    };
-    const LOCATIONS = ["The Bronx", "Ghetto", "Manhattan", "Coney Island", "Brooklyn", "Queens"];
-    const DRUGS = [
-        { name: "Cocaine", min: 15000, max: 30000 }, { name: "Heroin", min: 5000, max: 14000 },
-        { name: "Acid", min: 1000, max: 4500 }, { name: "Weed", min: 300, max: 900 },
-        { name: "Speed", min: 100, max: 350 }, { name: "Ludes", min: 10, max: 60 }
-    ];
+    const LOCATION_NAMES = Object.keys(LOCATIONS);
+    const DRUGS = [ { name: "Cocaine", min: 15000, max: 30000 }, { name: "Heroin", min: 5000, max: 14000 }, { name: "Acid", min: 1000, max: 4500 }, { name: "Weed", min: 300, max: 900 }, { name: "Speed", min: 100, max: 350 }, { name: "Ludes", min: 10, max: 60 } ];
 
     let state = {};
     let combatState = {};
@@ -337,200 +328,46 @@ document.addEventListener('DOMContentLoaded', () => {
     let isBooting = true;
 
     const el = {
-        status: {
-            day: document.getElementById('status-day'), location: document.getElementById('status-location'),
-            health: document.getElementById('status-health'), cash: document.getElementById('status-cash'),
-            bank: document.getElementById('status-bank'), debt: document.getElementById('status-debt'),
-            coat: document.getElementById('status-coat'), guns: document.getElementById('status-guns'),
-        },
-        marketView: document.getElementById('market-view'), travelView: document.getElementById('travel-view'),
-        marketTableBody: document.querySelector('#market-table tbody'),
-        locationListBody: document.querySelector('#location-list tbody'),
-        buyBtn: document.getElementById('buy-btn'), sellBtn: document.getElementById('sell-btn'),
-        jetBtn: document.getElementById('jet-btn'), bankBtn: document.getElementById('bank-btn'),
-        sharkBtn: document.getElementById('shark-btn'), leaderboardBtn: document.getElementById('leaderboard-btn'),
+        status: { day: document.getElementById('status-day'), location: document.getElementById('status-location'), health: document.getElementById('status-health'), cash: document.getElementById('status-cash'), bank: document.getElementById('status-bank'), debt: document.getElementById('status-debt'), coat: document.getElementById('status-coat'), guns: document.getElementById('status-guns'), gang: document.getElementById('status-gang') },
+        marketView: document.getElementById('market-view'), travelView: document.getElementById('travel-view'), marketTableBody: document.querySelector('#market-table tbody'), locationListBody: document.querySelector('#location-list tbody'),
+        buyBtn: document.getElementById('buy-btn'), sellBtn: document.getElementById('sell-btn'), jetBtn: document.getElementById('jet-btn'), bankBtn: document.getElementById('bank-btn'), sharkBtn: document.getElementById('shark-btn'), leaderboardBtn: document.getElementById('leaderboard-btn'),
         messageLog: document.getElementById('message-log'),
-        modal: {
-            overlay: document.getElementById('event-modal'), title: document.getElementById('modal-title'),
-            text: document.getElementById('modal-text'), actions: document.getElementById('modal-actions'),
-        },
-        combat: {
-            overlay: document.getElementById('combat-modal'), title: document.getElementById('combat-title'),
-            playerHealth: document.getElementById('combat-player-health'),
-            enemyHealth: document.getElementById('combat-enemy-health'),
-            timer: document.getElementById('combat-timer'),
-            actionText: document.getElementById('combat-action-text'),
-            actions: document.getElementById('combat-actions'),
-        },
-        travel: {
-            overlay: document.getElementById('travel-modal'),
-            animation: document.getElementById('travel-animation'),
-        }
+        modal: { overlay: document.getElementById('event-modal'), title: document.getElementById('modal-title'), text: document.getElementById('modal-text'), actions: document.getElementById('modal-actions'), },
+        combat: { overlay: document.getElementById('combat-modal'), title: document.getElementById('combat-title'), playerHealth: document.getElementById('combat-player-health'), enemyHealth: document.getElementById('combat-enemy-health'), timer: document.getElementById('combat-timer'), actionText: document.getElementById('combat-action-text'), actions: document.getElementById('combat-actions'), },
+        travel: { overlay: document.getElementById('travel-modal'), animation: document.getElementById('travel-animation'), }
     };
 
     const formatCurrency = (amount) => `$${Math.round(amount).toLocaleString()}`;
     const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-    function logMessage(message, isEvent = false) {
-        messageQueue.push({ text: message, event: isEvent });
-        if (!isTyping) {
-            processMessageQueue();
-        }
-    }
-
-    function processMessageQueue() {
-        if (messageQueue.length === 0) {
-            isTyping = false;
-            return;
-        }
-        isTyping = true;
-        const { text, event } = messageQueue.shift();
-        const p = document.createElement('p');
-        if (event) p.style.color = '#FFFF00';
-        p.appendChild(document.createTextNode('> '));
-        const messageSpan = document.createElement('span');
-        p.appendChild(messageSpan);
-        el.messageLog.insertBefore(p, el.messageLog.firstChild);
-        let i = 0;
-        const typingInterval = setInterval(() => {
-            if (i < text.length) {
-                messageSpan.textContent += text.charAt(i);
-                i++;
-            } else {
-                clearInterval(typingInterval);
-                processMessageQueue();
-            }
-        }, 20);
-    }
-
-    function updateStatusUI() {
-        const currentCoatUsage = Object.values(state.inventory).reduce((sum, qty) => sum + qty, 0);
-        el.status.day.textContent = `Day: ${state.day}`;
-        el.status.location.textContent = `Location: ${state.currentLocation}`;
-        el.status.health.textContent = `Health: ${Math.round(state.health)}`;
-        el.status.cash.textContent = `Cash: ${formatCurrency(state.cash)} / ${formatCurrency(state.wallet.capacity)}`;
-        el.status.bank.textContent = `Bank: ${formatCurrency(state.bank)}`;
-        el.status.debt.textContent = `Debt: ${formatCurrency(state.debt)}`;
-        el.status.coat.textContent = `Coat: ${currentCoatUsage}/${state.coatCapacity}`;
-        el.status.guns.textContent = `Guns: ${state.guns.length > 0 ? state.guns.map(g => g.name).join(', ') : 'None'}`;
-    }
-
-    function updateMarketUI() {
-        el.marketTableBody.innerHTML = '';
-        const locationPrices = state.prices[state.currentLocation];
-        DRUGS.forEach(drug => {
-            const price = locationPrices[drug.name];
-            const held = state.inventory[drug.name] || 0;
-            const row = `<tr><td>${drug.name}</td><td>${formatCurrency(price)}</td><td>${held}</td></tr>`;
-            el.marketTableBody.innerHTML += row;
-        });
-    }
-
-    function showModal(title, text, actions) {
-        el.modal.title.textContent = title;
-        el.modal.text.innerHTML = text;
-        el.modal.actions.innerHTML = "";
-        actions.forEach(act => {
-            const button = document.createElement("button");
-            button.textContent = act.text;
-            button.classList.add("modal-button");
-            button.onclick = act.action;
-            el.modal.actions.appendChild(button);
-        });
-        el.modal.overlay.classList.add('visible');
-    }
-
-    function closeModal() {
-        el.modal.overlay.classList.remove('visible');
-    }
-
-    function updateAllUI() {
-        updateStatusUI();
-        updateMarketUI();
-    }
+    function logMessage(message, isEvent = false) { messageQueue.push({ text: message, event: isEvent }); if (!isTyping) { processMessageQueue(); } }
+    function processMessageQueue() { if (messageQueue.length === 0) { isTyping = false; return; } isTyping = true; const { text, event } = messageQueue.shift(); const p = document.createElement('p'); if (event) p.style.color = '#FFFF00'; p.appendChild(document.createTextNode('> ')); const messageSpan = document.createElement('span'); p.appendChild(messageSpan); el.messageLog.insertBefore(p, el.messageLog.firstChild); let i = 0; const typingInterval = setInterval(() => { if (i < text.length) { messageSpan.textContent += text.charAt(i); i++; } else { clearInterval(typingInterval); processMessageQueue(); } }, 20); }
+    function updateStatusUI() { const currentCoatUsage = Object.values(state.inventory).reduce((sum, qty) => sum + qty, 0); el.status.day.textContent = `Day: ${state.day}`; el.status.location.textContent = `Location: ${state.currentLocation}`; el.status.health.textContent = `Health: ${Math.round(state.health)}`; el.status.cash.textContent = `Cash: ${formatCurrency(state.cash)} / ${formatCurrency(state.wallet.capacity)}`; el.status.bank.textContent = `Bank: ${formatCurrency(state.bank)}`; el.status.debt.textContent = `Debt: ${formatCurrency(state.debt)}`; el.status.coat.textContent = `Coat: ${currentCoatUsage}/${state.coatCapacity}`; el.status.guns.textContent = `Guns: ${state.guns.length > 0 ? state.guns.map(g => g.name).join(', ') : 'None'}`; el.status.gang.textContent = `Affiliation: ${state.gang}`; }
+    function updateMarketUI() { el.marketTableBody.innerHTML = ''; const locationPrices = state.prices[state.currentLocation]; DRUGS.forEach(drug => { const price = locationPrices[drug.name]; const held = state.inventory[drug.name] || 0; const row = `<tr><td>${drug.name}</td><td>${formatCurrency(price)}</td><td>${held}</td></tr>`; el.marketTableBody.innerHTML += row; }); }
+    function showModal(title, text, actions) { el.modal.title.textContent = title; el.modal.text.innerHTML = text; el.modal.actions.innerHTML = ""; actions.forEach(act => { const button = document.createElement("button"); button.textContent = act.text; button.classList.add("modal-button"); button.onclick = act.action; el.modal.actions.appendChild(button); }); el.modal.overlay.classList.add('visible'); }
+    function closeModal() { el.modal.overlay.classList.remove('visible'); }
+    function updateAllUI() { updateStatusUI(); updateMarketUI(); }
+    function generatePrices() { LOCATION_NAMES.forEach(loc => { state.prices[loc] = {}; DRUGS.forEach(drug => { state.prices[loc][drug.name] = getRandomInt(drug.min, drug.max); }); }); }
+    function showMarketView() { el.marketView.style.display = "block"; el.travelView.style.display = "none"; el.buyBtn.style.display = "block"; el.sellBtn.style.display = "block"; el.sharkBtn.style.display = "block"; el.jetBtn.textContent = "Jet"; el.bankBtn.style.display = "block"; el.leaderboardBtn.style.display = "block"; }
+    function showTravelView() { el.locationListBody.innerHTML = ""; LOCATION_NAMES.forEach(loc => { if (loc !== state.currentLocation) { const row = document.createElement("tr"); const cell = document.createElement("td"); const button = document.createElement("button"); button.textContent = `Go to ${loc}`; button.classList.add("actions-button"); button.onclick = () => travel(loc); cell.appendChild(button); row.appendChild(cell); el.locationListBody.appendChild(row); } }); el.marketView.style.display = "none"; el.travelView.style.display = "block"; el.buyBtn.style.display = "none"; el.sellBtn.style.display = "none"; el.sharkBtn.style.display = "none"; el.jetBtn.textContent = "Stay Here"; el.bankBtn.style.display = "none"; el.leaderboardBtn.style.display = "none"; }
+    function handleJetClick() { if (el.jetBtn.textContent === "Jet") { showTravelView(); } else { showMarketView(); } }
+    function addCash(amount) { const overflow = (state.cash + amount) - state.wallet.capacity; if (overflow > 0) { state.cash = state.wallet.capacity; logMessage(`Your wallet is full! You dropped ${formatCurrency(overflow)} on the ground.`, true); } else { state.cash += amount; } }
     
-    function generatePrices() {
-        LOCATIONS.forEach(loc => {
-            state.prices[loc] = {};
-            DRUGS.forEach(drug => {
-                state.prices[loc][drug.name] = getRandomInt(drug.min, drug.max);
-            });
-        });
-    }
-
-    function showMarketView() {
-        el.marketView.style.display = "block";
-        el.travelView.style.display = "none";
-        el.buyBtn.style.display = "block";
-        el.sellBtn.style.display = "block";
-        el.sharkBtn.style.display = "block";
-        el.jetBtn.textContent = "Jet";
-        el.bankBtn.style.display = "block";
-        el.leaderboardBtn.style.display = "block";
-    }
-
-    function showTravelView() {
-        el.locationListBody.innerHTML = "";
-        LOCATIONS.forEach(loc => {
-            if (loc !== state.currentLocation) {
-                const row = document.createElement("tr");
-                const cell = document.createElement("td");
-                const button = document.createElement("button");
-                button.textContent = `Go to ${loc}`;
-                button.classList.add("actions-button");
-                button.onclick = () => travel(loc);
-                cell.appendChild(button);
-                row.appendChild(cell);
-                el.locationListBody.appendChild(row);
-            }
-        });
-        el.marketView.style.display = "none";
-        el.travelView.style.display = "block";
-        el.buyBtn.style.display = "none";
-        el.sellBtn.style.display = "none";
-        el.sharkBtn.style.display = "none";
-        el.jetBtn.textContent = "Stay Here";
-        el.bankBtn.style.display = "none";
-        el.leaderboardBtn.style.display = "none";
-    }
-
-    function handleJetClick() {
-        if (el.jetBtn.textContent === "Jet") {
-            showTravelView();
-        } else {
-            showMarketView();
-        }
-    }
-
-    function addCash(amount) {
-        const overflow = (state.cash + amount) - state.wallet.capacity;
-        if (overflow > 0) {
-            state.cash = state.wallet.capacity;
-            logMessage(`Your wallet is full! You dropped ${formatCurrency(overflow)} on the ground.`, true);
-        } else {
-            state.cash += amount;
-        }
-    }
-
     function buy() {
         const drugName = prompt(`What to buy?\n\n${DRUGS.map(d => d.name).join(", ")}`);
         if (!drugName) return;
         const drug = DRUGS.find(d => d.name.toLowerCase() === drugName.trim().toLowerCase());
-        if (!drug) {
-            alert("Invalid drug.");
-            return;
+        if (!drug) { alert("Invalid drug."); return; }
+        let price = state.prices[state.currentLocation][drug.name];
+        if (state.gang !== "None" && state.gang !== "Independent" && state.gang === LOCATIONS[state.currentLocation].turf) {
+            const originalPrice = price;
+            price = Math.round(price * 0.9);
+            logMessage(`Your gang affiliation gets you a discount from ${formatCurrency(originalPrice)} to ${formatCurrency(price)}!`, true);
         }
-        const price = state.prices[state.currentLocation][drug.name];
         const freeSpace = state.coatCapacity - Object.values(state.inventory).reduce((sum, qty) => sum + qty, 0);
-        if (freeSpace <= 0) {
-            alert("Coat is full!");
-            return;
-        }
+        if (freeSpace <= 0) { alert("Coat is full!"); return; }
         const maxCanBuy = Math.min(Math.floor(state.cash / price), freeSpace);
-        if (maxCanBuy <= 0) {
-            alert("Can't afford or carry any.");
-            return;
-        }
+        if (maxCanBuy <= 0) { alert("Can't afford or carry any."); return; }
         let quantity = parseInt(prompt(`Price: ${formatCurrency(price)}. Max: ${maxCanBuy}. How many?`));
         if (isNaN(quantity) || quantity <= 0) return;
         quantity = Math.min(quantity, maxCanBuy);
@@ -540,83 +377,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updateAllUI();
     }
 
-    function sell() {
-        const heldDrugs = Object.keys(state.inventory).filter(k => state.inventory[k] > 0);
-        if (heldDrugs.length === 0) {
-            alert("Nothing to sell!");
-            return;
-        }
-        const drugName = prompt(`What to sell?\n\n${heldDrugs.join(", ")}`);
-        if (!drugName) return;
-        const drug = DRUGS.find(d => d.name.toLowerCase() === drugName.trim().toLowerCase());
-        const amountHeld = state.inventory[drug?.name];
-        if (!drug || !amountHeld || amountHeld <= 0) {
-            alert("You don't have that.");
-            return;
-        }
-        const price = state.prices[state.currentLocation][drug.name];
-        let quantity = parseInt(prompt(`You have ${amountHeld}. Price: ${formatCurrency(price)}. How many?`));
-        if (isNaN(quantity) || quantity <= 0) return;
-        quantity = Math.min(quantity, amountHeld);
-        addCash(quantity * price);
-        state.inventory[drug.name] -= quantity;
-        logMessage(`Sold ${quantity} of ${drug.name} for ${formatCurrency(quantity * price)}.`);
-        updateAllUI();
-    }
-
-    function travel(destination) {
-        el.travel.overlay.classList.add('visible');
-        let dots = 0;
-        const animationInterval = setInterval(() => {
-            dots = (dots + 1) % 4;
-            el.travel.animation.textContent = `Traveling${'.'.repeat(dots)}`;
-        }, 500);
-
-        setTimeout(() => {
-            clearInterval(animationInterval);
-            el.travel.overlay.classList.remove('visible');
-            state.currentLocation = destination;
-            nextDay();
-            showMarketView();
-        }, 2000);
-    }
-
-    function visitBank() {
-        const choice = prompt(`Bank balance: ${formatCurrency(state.bank)}.\n\n1. Deposit\n2. Withdraw`);
-        if (choice === '1') {
-            let amount = parseInt(prompt(`Deposit how much? (Cash: ${formatCurrency(state.cash)})`));
-            if (!isNaN(amount) && amount > 0) {
-                const actual = Math.min(amount, state.cash);
-                state.cash -= actual;
-                state.bank += actual;
-                logMessage(`Deposited ${formatCurrency(actual)}.`);
-            }
-        } else if (choice === '2') {
-            let amount = parseInt(prompt(`Withdraw how much? (Max: ${formatCurrency(state.bank)})`));
-            if (!isNaN(amount) && amount > 0) {
-                const maxHold = state.wallet.capacity - state.cash;
-                const actual = Math.min(amount, state.bank, maxHold);
-                if (actual < amount) {
-                    alert(`Wallet can only fit ${formatCurrency(actual)}!`);
-                }
-                state.bank -= actual;
-                state.cash += actual;
-                logMessage(`Withdrew ${formatCurrency(actual)}.`);
-            }
-        }
-        updateAllUI();
-    }
-
-    function visitLoanShark() {
-        const options = `The loan shark eyes you suspiciously.\n\n1. Manage Debt\n2. Buy Guns\n3. Upgrade Wallet\n4. Visit the Doctor`;
-        const choice = prompt(options);
-        if (choice === '1') manageDebt();
-        if (choice === '2') buyGuns();
-        if (choice === '3') upgradeWallet();
-        if (choice === '4') visitDoctor();
-        updateAllUI();
-    }
-
+    function sell() { const heldDrugs = Object.keys(state.inventory).filter(k => state.inventory[k] > 0); if (heldDrugs.length === 0) { alert("Nothing to sell!"); return; } const drugName = prompt(`What to sell?\n\n${heldDrugs.join(", ")}`); if (!drugName) return; const drug = DRUGS.find(d => d.name.toLowerCase() === drugName.trim().toLowerCase()); const amountHeld = state.inventory[drug?.name]; if (!drug || !amountHeld || amountHeld <= 0) { alert("You don't have that."); return; } const price = state.prices[state.currentLocation][drug.name]; let quantity = parseInt(prompt(`You have ${amountHeld}. Price: ${formatCurrency(price)}. How many?`)); if (isNaN(quantity) || quantity <= 0) return; quantity = Math.min(quantity, amountHeld); const earnings = quantity * price; addCash(earnings); state.inventory[drug.name] -= quantity; if (earnings > 25000) { state.streetCred = Math.min(100, state.streetCred + 2); } logMessage(`Sold ${quantity} of ${drug.name} for ${formatCurrency(earnings)}.`); updateAllUI(); }
+    function travel(destination) { el.travel.overlay.classList.add('visible'); let dots = 0; const animationInterval = setInterval(() => { dots = (dots + 1) % 4; el.travel.animation.textContent = `Traveling${'.'.repeat(dots)}`; }, 500); setTimeout(() => { clearInterval(animationInterval); el.travel.overlay.classList.remove('visible'); state.currentLocation = destination; nextDay(); showMarketView(); }, 2000); }
+    function visitBank() { const choice = prompt(`Bank balance: ${formatCurrency(state.bank)}.\n\n1. Deposit\n2. Withdraw`); if (choice === '1') { let amount = parseInt(prompt(`Deposit how much? (Cash: ${formatCurrency(state.cash)})`)); if (!isNaN(amount) && amount > 0) { const actual = Math.min(amount, state.cash); state.cash -= actual; state.bank += actual; logMessage(`Deposited ${formatCurrency(actual)}.`); } } else if (choice === '2') { let amount = parseInt(prompt(`Withdraw how much? (Max: ${formatCurrency(state.bank)})`)); if (!isNaN(amount) && amount > 0) { const maxHold = state.wallet.capacity - state.cash; const actual = Math.min(amount, state.bank, maxHold); if (actual < amount) { alert(`Wallet can only fit ${formatCurrency(actual)}!`); } state.bank -= actual; state.cash += actual; logMessage(`Withdrew ${formatCurrency(actual)}.`); } } updateAllUI(); }
+    function visitLoanShark() { const options = `The loan shark eyes you suspiciously.\n\n1. Manage Debt\n2. Buy Guns\n3. Upgrade Wallet\n4. Visit the Doctor`; const choice = prompt(options); if (choice === '1') manageDebt(); if (choice === '2') buyGuns(); if (choice === '3') upgradeWallet(); if (choice === '4') visitDoctor(); updateAllUI(); }
     function manageDebt() {
         const choice = prompt(`Debt: ${formatCurrency(state.debt)}.\n1. Pay\n2. Borrow`);
         if (choice === '1') {
@@ -626,6 +390,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.cash -= actual;
                 state.debt -= actual;
                 logMessage(`Paid ${formatCurrency(actual)}.`);
+                if (state.debt <= 0) {
+                    logMessage("The loan shark looks impressed. Your reputation grows.", true);
+                    state.streetCred = Math.min(100, state.streetCred + 10);
+                }
             }
         } else if (choice === '2') {
             let amount = parseInt(prompt(`Borrow how much?`));
@@ -636,318 +404,67 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-
-    function buyGuns() {
-        const owned = state.guns.map(g => g.name);
-        const forSale = Object.keys(GUNS).filter(g => !owned.includes(g));
-        if (forSale.length === 0) {
-            alert("You own all guns!");
-            return;
-        }
-        const opts = forSale.map((n, i) => `${i + 1}. ${n} (${formatCurrency(GUNS[n].price)})`).join('\n');
-        const choice = parseInt(prompt(`"Hardware for ya."\n\n${opts}`)) - 1;
-        if (!isNaN(choice) && choice >= 0 && choice < forSale.length) {
-            const name = forSale[choice];
-            const gun = GUNS[name];
-            if (state.cash >= gun.price) {
-                state.cash -= gun.price;
-                state.guns.push({ name, ...gun });
-                logMessage(`Bought a ${name}.`);
-            } else {
-                alert("Can't afford it!");
-            }
-        }
-    }
-
-    function upgradeWallet() {
-        const names = Object.keys(WALLETS);
-        const currentIndex = names.indexOf(state.wallet.name);
-        if (currentIndex >= names.length - 1) {
-            alert("You have the best wallet!");
-            return;
-        }
-        const nextName = names[currentIndex + 1];
-        const nextWallet = WALLETS[nextName];
-        if (confirm(`Upgrade to ${nextName} (Cap: ${formatCurrency(nextWallet.capacity)}) for ${formatCurrency(nextWallet.price)}?`)) {
-            if (state.cash >= nextWallet.price) {
-                state.cash -= nextWallet.price;
-                state.wallet = { name: nextName, ...nextWallet };
-                logMessage(`Bought a new ${nextName}.`);
-            } else {
-                alert("Can't afford it!");
-            }
-        }
-    }
-
-    function visitDoctor() {
-        const healthNeeded = 100 - state.health;
-        if (healthNeeded <= 0) {
-            alert("The doctor says you're in perfect health!");
-            return;
-        }
-        const cost = healthNeeded * CONFIG.HEAL_COST_PER_HP;
-        if (confirm(`The doctor can heal you for ${formatCurrency(cost)}. Pay up?`)) {
-            if (state.cash >= cost) {
-                state.cash -= cost;
-                state.health = 100;
-                logMessage("The doctor patched you up. You feel great!");
-            } else {
-                alert("You can't afford the doctor's fee!");
-            }
-        }
-    }
-
-    function startCombat(enemy) {
-        combatState = {
-            playerHealth: state.health,
-            enemy: { ...enemy },
-            turn: 'player',
-            isOver: false
-        };
-        el.combat.title.textContent = `Fighting ${enemy.name}!`;
-        combatLog(`${enemy.name} wants your stuff!`);
-        updateCombatUI();
-        el.combat.overlay.classList.add('visible');
-    }
-
-    function combatLog(msg) {
-        el.combat.actionText.textContent = msg;
-    }
-
-    function clearCombatTimers() {
-        clearTimeout(actionTimer);
-        clearInterval(countdownInterval);
-        el.combat.timer.textContent = '';
-    }
-    
-    function disableCombatActions() {
-        const buttons = el.combat.actions.querySelectorAll('button');
-        buttons.forEach(button => button.disabled = true);
-    }
-
-    function updateCombatUI() {
-        clearCombatTimers();
-        el.combat.playerHealth.textContent = `Your Health: ${Math.round(combatState.playerHealth)}`;
-        el.combat.enemyHealth.textContent = `${combatState.enemy.name} Health: ${Math.round(combatState.enemy.health)}`;
-        el.combat.actions.innerHTML = '';
-        if (combatState.turn === 'player' && combatState.playerHealth > 0 && combatState.enemy.health > 0) {
-            let timeLeft = 10;
-            el.combat.timer.textContent = `Time: ${timeLeft}`;
-            countdownInterval = setInterval(() => {
-                timeLeft--;
-                el.combat.timer.textContent = `Time: ${timeLeft}`;
-                if (timeLeft < 0) {
-                    clearInterval(countdownInterval);
-                }
-            }, 1000);
-            actionTimer = setTimeout(() => {
-                combatLog("You hesitate too long!");
-                combatState.turn = 'enemy';
-                updateCombatUI();
-                setTimeout(enemyAttack, 1000);
-            }, 10000);
-            if (state.guns.length > 0) {
-                state.guns.forEach(gun => {
-                    const btn = document.createElement('button');
-                    btn.textContent = `Attack with ${gun.name}`;
-                    btn.classList.add('modal-button');
-                    btn.onclick = () => playerAttack(gun);
-                    el.combat.actions.appendChild(btn);
-                });
-            } else {
-                const btn = document.createElement('button');
-                btn.textContent = `Punch`;
-                btn.classList.add('modal-button');
-                btn.onclick = () => playerAttack({ name: "Fists", minDamage: 5, maxDamage: 10, accuracy: 1.0 });
-                el.combat.actions.appendChild(btn);
-            }
-            const escapeBtn = document.createElement('button');
-            escapeBtn.textContent = 'Try to Escape';
-            escapeBtn.classList.add('modal-button');
-            escapeBtn.onclick = tryEscape;
-            el.combat.actions.appendChild(escapeBtn);
-        }
-    }
-
-    function playerAttack(gun) {
-        if (combatState.isOver || combatState.playerHealth <= 0 || combatState.enemy.health <= 0) return;
-        clearCombatTimers();
-        disableCombatActions();
-        if (gun.name === "AK-47" && Math.random() < gun.headshotChance) {
-            combatState.enemy.health = 0;
-            combatLog(`HEADSHOT! You instantly take them down!`);
-        } else if (Math.random() < gun.accuracy) {
-            const damage = getRandomInt(gun.minDamage, gun.maxDamage);
-            combatState.enemy.health = Math.max(0, combatState.enemy.health - damage);
-            if (gun.name === "Fists") {
-                combatLog(`You landed a solid punch for ${damage} damage!`);
-            } else {
-                combatLog(`You hit with your ${gun.name} for ${damage} damage!`);
-            }
-        } else {
-            combatLog(`Your shot with the ${gun.name} missed!`);
-        }
-        updateCombatUI();
-        checkCombatEnd();
-        if (!combatState.isOver && combatState.enemy.health > 0) {
-            combatState.turn = 'enemy';
-            setTimeout(enemyAttack, 1000);
-        }
-    }
-
-    function enemyAttack() {
-        if (combatState.isOver || combatState.playerHealth <= 0 || combatState.enemy.health <= 0) return;
-        if (Math.random() < combatState.enemy.accuracy) {
-            const damage = getRandomInt(combatState.enemy.minDamage, combatState.enemy.maxDamage);
-            combatState.playerHealth = Math.max(0, combatState.playerHealth - damage);
-            combatLog(`${combatState.enemy.name} hits you for ${damage} damage!`);
-        } else {
-            combatLog(`${combatState.enemy.name} misses!`);
-        }
-        combatState.turn = 'player';
-        updateCombatUI();
-        checkCombatEnd();
-    }
-
-    function tryEscape() {
-        if (combatState.isOver) return;
-        clearCombatTimers();
-        disableCombatActions();
-        combatLog("You try to run...");
-        if (Math.random() > 0.3) {
-            endCombat('escaped');
-        } else {
-            combatLog("...but you couldn't get away!");
-            combatState.turn = 'enemy';
-            updateCombatUI();
-            setTimeout(enemyAttack, 1000);
-        }
-    }
-
-    function checkCombatEnd() {
-        if (combatState.enemy.health <= 0) {
-            endCombat('win');
-        } else if (combatState.playerHealth <= 0) {
-            endCombat('lose');
-        }
-    }
-
-    function endCombat(outcome) {
-        if (combatState.isOver) return;
-        combatState.isOver = true;
-        clearCombatTimers();
-        state.health = combatState.playerHealth;
-        let shouldEndGame = false;
-        if (outcome === 'lose') {
-            state.health = 0;
-            shouldEndGame = true;
-            combatLog(`You were defeated by ${combatState.enemy.name}!`);
-        } else if (outcome === 'win') {
-            combatLog(`You defeated ${combatState.enemy.name}!`);
-            if (combatState.enemy.cashReward) {
-                const reward = getRandomInt(combatState.enemy.cashReward * 0.5, combatState.enemy.cashReward);
-                addCash(reward);
-                logMessage(`You find ${formatCurrency(reward)} on them.`);
-            }
-        } else if (outcome === 'escaped') {
-            logMessage(`You successfully escaped from ${combatState.enemy.name}!`, true);
-        }
-        setTimeout(() => {
-            el.combat.overlay.classList.remove('visible');
-            updateAllUI();
-            if (shouldEndGame) {
-                endGame(true);
-            }
-        }, 2000);
-    }
-
-    const ATMOSPHERIC_EVENTS = [
-        "You see a kid steal a candy bar from a corner store. The owner doesn't notice.",
-        "A pristine, classic car drives by, looking completely out of place here.",
-        "The wail of police sirens echoes in the distance, but they're not for you.",
-        "You overhear a couple arguing loudly on the street corner.",
-        "The smell of street food hangs heavy in the air.",
-        "A rat scurries across your path, disappearing into a grate.",
-    ];
-
-    function atmosphericEvent() {
-        logMessage(ATMOSPHERIC_EVENTS[getRandomInt(0, ATMOSPHERIC_EVENTS.length - 1)], true);
-    }
+    function buyGuns() { const owned = state.guns.map(g => g.name); const forSale = Object.keys(GUNS).filter(g => !owned.includes(g)); if (forSale.length === 0) { alert("You own all guns!"); return; } const opts = forSale.map((n, i) => `${i + 1}. ${n} (${formatCurrency(GUNS[n].price)})`).join('\n'); const choice = parseInt(prompt(`"Hardware for ya."\n\n${opts}`)) - 1; if (!isNaN(choice) && choice >= 0 && choice < forSale.length) { const name = forSale[choice]; const gun = GUNS[name]; if (state.cash >= gun.price) { state.cash -= gun.price; state.guns.push({ name, ...gun }); logMessage(`Bought a ${name}.`); } else { alert("Can't afford it!"); } } }
+    function upgradeWallet() { const names = Object.keys(WALLETS); const currentIndex = names.indexOf(state.wallet.name); if (currentIndex >= names.length - 1) { alert("You have the best wallet!"); return; } const nextName = names[currentIndex + 1]; const nextWallet = WALLETS[nextName]; if (confirm(`Upgrade to ${nextName} (Cap: ${formatCurrency(nextWallet.capacity)}) for ${formatCurrency(nextWallet.price)}?`)) { if (state.cash >= nextWallet.price) { state.cash -= nextWallet.price; state.wallet = { name: nextName, ...nextWallet }; logMessage(`Bought a new ${nextName}.`); } else { alert("Can't afford it!"); } } }
+    function visitDoctor() { const healthNeeded = 100 - state.health; if (healthNeeded <= 0) { alert("The doctor says you're in perfect health!"); return; } const cost = healthNeeded * CONFIG.HEAL_COST_PER_HP; if (confirm(`The doctor can heal you for ${formatCurrency(cost)}. Pay up?`)) { if (state.cash >= cost) { state.cash -= cost; state.health = 100; logMessage("The doctor patched you up. You feel great!"); } else { alert("You can't afford the doctor's fee!"); } } }
+    function startCombat(enemy) { combatState = { playerHealth: state.health, enemy: { ...enemy }, turn: 'player', isOver: false }; el.combat.title.textContent = `Fighting ${enemy.name}!`; combatLog(`${enemy.name} wants your stuff!`); updateCombatUI(); el.combat.overlay.classList.add('visible'); }
+    function combatLog(msg) { el.combat.actionText.textContent = msg; }
+    function clearCombatTimers() { clearTimeout(actionTimer); clearInterval(countdownInterval); el.combat.timer.textContent = ''; }
+    function disableCombatActions() { const buttons = el.combat.actions.querySelectorAll('button'); buttons.forEach(button => button.disabled = true); }
+    function updateCombatUI() { clearCombatTimers(); el.combat.playerHealth.textContent = `Your Health: ${Math.round(combatState.playerHealth)}`; el.combat.enemyHealth.textContent = `${combatState.enemy.name} Health: ${Math.round(combatState.enemy.health)}`; el.combat.actions.innerHTML = ''; if (combatState.turn === 'player' && combatState.playerHealth > 0 && combatState.enemy.health > 0) { let timeLeft = 10; el.combat.timer.textContent = `Time: ${timeLeft}`; countdownInterval = setInterval(() => { timeLeft--; el.combat.timer.textContent = `Time: ${timeLeft}`; if (timeLeft < 0) { clearInterval(countdownInterval); } }, 1000); actionTimer = setTimeout(() => { combatLog("You hesitate too long!"); combatState.turn = 'enemy'; updateCombatUI(); setTimeout(enemyAttack, 1000); }, 10000); if (state.guns.length > 0) { state.guns.forEach(gun => { const btn = document.createElement('button'); btn.textContent = `Attack with ${gun.name}`; btn.classList.add('modal-button'); btn.onclick = () => playerAttack(gun); el.combat.actions.appendChild(btn); }); } else { const btn = document.createElement('button'); btn.textContent = `Punch`; btn.classList.add('modal-button'); btn.onclick = () => playerAttack({ name: "Fists", minDamage: 5, maxDamage: 10, accuracy: 1.0 }); el.combat.actions.appendChild(btn); } const escapeBtn = document.createElement('button'); escapeBtn.textContent = 'Try to Escape'; escapeBtn.classList.add('modal-button'); escapeBtn.onclick = tryEscape; el.combat.actions.appendChild(escapeBtn); } }
+    function playerAttack(gun) { if (combatState.isOver || combatState.playerHealth <= 0 || combatState.enemy.health <= 0) return; clearCombatTimers(); disableCombatActions(); if (gun.name === "AK-47" && Math.random() < gun.headshotChance) { combatState.enemy.health = 0; combatLog(`HEADSHOT! You instantly take them down!`); } else if (Math.random() < gun.accuracy) { const damage = getRandomInt(gun.minDamage, gun.maxDamage); combatState.enemy.health = Math.max(0, combatState.enemy.health - damage); if (gun.name === "Fists") { combatLog(`You landed a solid punch for ${damage} damage!`); } else { combatLog(`You hit with your ${gun.name} for ${damage} damage!`); } } else { combatLog(`Your shot with the ${gun.name} missed!`); } updateCombatUI(); checkCombatEnd(); if (!combatState.isOver && combatState.enemy.health > 0) { combatState.turn = 'enemy'; setTimeout(enemyAttack, 1000); } }
+    function enemyAttack() { if (combatState.isOver || combatState.playerHealth <= 0 || combatState.enemy.health <= 0) return; if (Math.random() < combatState.enemy.accuracy) { const damage = getRandomInt(combatState.enemy.minDamage, combatState.enemy.maxDamage); combatState.playerHealth = Math.max(0, combatState.playerHealth - damage); combatLog(`${combatState.enemy.name} hits you for ${damage} damage!`); } else { combatLog(`${combatState.enemy.name} misses!`); } combatState.turn = 'player'; updateCombatUI(); checkCombatEnd(); }
+    function tryEscape() { if (combatState.isOver) return; clearCombatTimers(); disableCombatActions(); combatLog("You try to run..."); if (Math.random() > 0.3) { endCombat('escaped'); } else { combatLog("...but you couldn't get away!"); combatState.turn = 'enemy'; updateCombatUI(); setTimeout(enemyAttack, 1000); } }
+    function checkCombatEnd() { if (combatState.enemy.health <= 0) { endCombat('win'); } else if (combatState.playerHealth <= 0) { endCombat('lose'); } }
+    function endCombat(outcome) { if (combatState.isOver) return; combatState.isOver = true; clearCombatTimers(); state.health = combatState.playerHealth; let shouldEndGame = false; if (outcome === 'lose') { state.health = 0; shouldEndGame = true; combatLog(`You were defeated by ${combatState.enemy.name}!`); } else if (outcome === 'win') { state.streetCred = Math.min(100, state.streetCred + 5); combatLog(`You defeated ${combatState.enemy.name}!`); if (combatState.enemy.cashReward) { const reward = getRandomInt(combatState.enemy.cashReward * 0.5, combatState.enemy.cashReward); addCash(reward); logMessage(`You find ${formatCurrency(reward)} on them.`); } } else if (outcome === 'escaped') { logMessage(`You successfully escaped from ${combatState.enemy.name}!`, true); } setTimeout(() => { el.combat.overlay.classList.remove('visible'); updateAllUI(); if (shouldEndGame) { endGame(true); } }, 2000); }
+    const ATMOSPHERIC_EVENTS = [ "You see a kid steal a candy bar from a corner store. The owner doesn't notice.", "A pristine, classic car drives by, looking completely out of place here.", "The wail of police sirens echoes in the distance, but they're not for you.", "You overhear a couple arguing loudly on the street corner.", "The smell of street food hangs heavy in the air.", "A rat scurries across your path, disappearing into a grate.", ];
+    function atmosphericEvent() { logMessage(ATMOSPHERIC_EVENTS[getRandomInt(0, ATMOSPHERIC_EVENTS.length - 1)], true); }
+    function gangProtectionEvent() { logMessage("A couple of thugs start walking towards you, but they see your colors and quickly change their minds.", true); }
 
     function handleRandomEvent() {
         if (Math.random() > CONFIG.EVENT_CHANCE) return;
-        const events = [
-            copEncounter, mugging,
-            findDrugs, findDrugs,
-            priceSpike, priceCrash,
-            findCoat, findCoat,
-            atmosphericEvent, atmosphericEvent, atmosphericEvent,
-        ];
-        if (state.debt > 15000 && state.day > 5) {
-            events.push(loanSharkWarning);
+        const currentTurf = LOCATIONS[state.currentLocation].turf;
+        const rivalGang = state.gang === 'Stilettos' ? 'Breakers' : 'Stilettos';
+        if (state.gang !== 'None' && state.gang !== 'Independent' && currentTurf === rivalGang && Math.random() < 0.5) {
+            gangAmbushEvent();
+            return; 
         }
-        events[Math.floor(Math.random() * events.length)]();
-    }
-
-    function copEncounter() {
-        logMessage("Officer Hardass wants a word with you!", true);
-        startCombat({ name: "Officer Hardass", health: 100, minDamage: 25, maxDamage: 30, accuracy: 0.8 });
-    }
-
-    function mugging() {
-        logMessage("A shady group of thugs corner you in an alley!", true);
-        startCombat({ name: "Muggers", health: 60, minDamage: 25, maxDamage: 35, accuracy: 0.7, cashReward: 500 });
-    }
-
-    function findDrugs() {
-        const drug = DRUGS[getRandomInt(0, DRUGS.length - 1)];
-        const qty = getRandomInt(2, 10);
-        if (state.coatCapacity - Object.values(state.inventory).reduce((s, q) => s + q, 0) >= qty) {
-            state.inventory[drug.name] = (state.inventory[drug.name] || 0) + qty;
-            logMessage(`Found a stash of ${qty} ${drug.name}!`, true);
-        }
-    }
-
-    function priceSpike() {
-        const drug = DRUGS[getRandomInt(0, DRUGS.length - 1)];
-        const mult = getRandomInt(3, 6);
-        LOCATIONS.forEach(loc => {
-            state.prices[loc][drug.name] *= mult;
-        });
-        const msg = `Cops busted a shipment of ${drug.name}. Prices are skyrocketing!`;
-        logMessage(msg, true);
-        showModal("Market News", msg, [{ text: "Interesting...", action: closeModal }]);
-    }
-
-    function priceCrash() {
-        const drug = DRUGS[getRandomInt(0, DRUGS.length - 1)];
-        const div = getRandomInt(3, 6);
-        LOCATIONS.forEach(loc => {
-            state.prices[loc][drug.name] = Math.max(1, Math.round(state.prices[loc][drug.name] / div));
-        });
-        const msg = `A cartel is flooding the market with cheap ${drug.name}. Prices have bottomed out!`;
-        logMessage(msg, true);
-        showModal("Market News", msg, [{ text: "Noted.", action: closeModal }]);
-    }
-
-    function loanSharkWarning() {
-        if (state.debt <= 0) return;
-        logMessage("A goon named Vinny taps you on the shoulder.", true);
-        showModal("A Message...", "Vinny says the Loan Shark is getting impatient. 'Pay up soon, or I'll be back to break your legs.'", [{
-            text: "I'll get on it...",
-            action: () => {
-                state.health = Math.max(1, state.health - 10);
-                logMessage("He punches you in the gut. You lose 10 health.", true);
-                updateAllUI();
-                closeModal();
+        
+        // --- MORE FIGHTS FIX ---
+        const fightChance = 0.25 + (LOCATIONS[state.currentLocation].risk * 0.5); 
+        if (Math.random() < fightChance) {
+            const possibleFights = [copEncounter];
+            if (state.gang !== currentTurf) {
+                possibleFights.push(mugging);
             }
-        }]);
+            possibleFights[getRandomInt(0, possibleFights.length - 1)]();
+            return;
+        }
+
+        // If no fight, trigger a non-combat event.
+        const nonCombatEvents = [ findDrugs, priceSpike, priceCrash, findCoat, atmosphericEvent, atmosphericEvent ];
+        if (state.debt > 15000 && state.day > 5) { nonCombatEvents.push(loanSharkWarning); }
+        if (state.gang !== 'None' && state.gang !== 'Independent' && currentTurf === state.gang) { nonCombatEvents.push(gangProtectionEvent); }
+        nonCombatEvents[getRandomInt(0, nonCombatEvents.length - 1)]();
     }
 
-    function findCoat() {
-        const space = getRandomInt(10, 30);
-        state.coatCapacity += space;
-        logMessage(`Found a bigger trench coat! Capacity increased by ${space}.`, true);
+    function copEncounter() { logMessage("Officer Hardass wants a word with you!", true); startCombat({ name: "Officer Hardass", health: 100, minDamage: 25, maxDamage: 30, accuracy: 0.8 }); }
+    function mugging() { logMessage("A shady group of thugs corner you in an alley!", true); startCombat({ name: "Muggers", health: 60, minDamage: 25, maxDamage: 35, accuracy: 0.7, cashReward: 500 }); }
+    function gangAmbushEvent() { const rivalGang = state.gang === 'Stilettos' ? 'Breakers' : 'Stilettos'; logMessage(`You've wandered into ${rivalGang} turf. They don't look happy to see you.`, true); startCombat({ name: `${rivalGang} Enforcers`, health: 120, minDamage: 30, maxDamage: 40, accuracy: 0.85, cashReward: 1000 }); }
+    function findDrugs() { const drug = DRUGS[getRandomInt(0, DRUGS.length - 1)]; const qty = getRandomInt(2, 10); if (state.coatCapacity - Object.values(state.inventory).reduce((s, q) => s + q, 0) >= qty) { state.inventory[drug.name] = (state.inventory[drug.name] || 0) + qty; logMessage(`Found a stash of ${qty} ${drug.name}!`, true); } }
+    function priceSpike() { const drug = DRUGS[getRandomInt(0, DRUGS.length - 1)]; const mult = getRandomInt(3, 6); LOCATION_NAMES.forEach(loc => { state.prices[loc][drug.name] *= mult; }); const msg = `A celebrity was spotted using ${drug.name}. It's the hot new thing!`; logMessage(msg, true); showModal("Market News", msg, [{ text: "Interesting...", action: closeModal }]); }
+    function priceCrash() { const drug = DRUGS[getRandomInt(0, DRUGS.length - 1)]; const div = getRandomInt(3, 6); LOCATION_NAMES.forEach(loc => { state.prices[loc][drug.name] = Math.max(1, Math.round(state.prices[loc][drug.name] / div)); }); const msg = `A new study says ${drug.name} is bad for your health. Demand plummets.`; logMessage(msg, true); showModal("Market News", msg, [{ text: "Noted.", action: closeModal }]); }
+    function loanSharkWarning() { if (state.debt <= 0) return; logMessage("A goon named Vinny taps you on the shoulder.", true); showModal("A Message...", "Vinny says the Loan Shark is getting impatient. 'Pay up soon, or I'll be back to break your legs.'", [{ text: "I'll get on it...", action: () => { state.health = Math.max(1, state.health - 10); logMessage("He punches you in the gut. You lose 10 health.", true); updateAllUI(); closeModal(); } }]); }
+    function findCoat() { const space = getRandomInt(10, 30); state.coatCapacity += space; logMessage(`Found a bigger trench coat! Capacity increased by ${space}.`, true); }
+    
+    function gangRecruitmentEvent() {
+        const message = "Your name is making waves. Two of the city's biggest gangs have taken notice and want you on their crew. This is a one-time offer.<br><br><strong>The Stilettos:</strong> Control Manhattan. They offer protection and discounts on their turf.<br><br><strong>The Breakers:</strong> Run the Ghetto. They offer the same, but on their own turf.<br><br>Choose your side, or walk your own path.";
+        const actions = [
+            { text: "Join the Stilettos", action: () => { state.gang = "Stilettos"; logMessage("You've joined the Stilettos. Try not to get stabbed.", true); closeModal(); updateAllUI(); }},
+            { text: "Join the Breakers", action: () => { state.gang = "Breakers"; logMessage("You're running with the Breakers now. Stay tough.", true); closeModal(); updateAllUI(); }},
+            { text: "Stay Independent", action: () => { state.gang = "Independent"; logMessage("You chose to go it alone. Good luck.", true); closeModal(); updateAllUI(); }},
+        ];
+        showModal("An Offer", message, actions);
     }
     
     function nextDay() {
@@ -961,16 +478,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         logMessage(`--- Day ${state.day} in ${state.currentLocation} ---`);
         generatePrices();
-        handleRandomEvent();
+        if (state.streetCred >= 25 && !state.gangOfferMade) {
+            gangRecruitmentEvent();
+            state.gangOfferMade = true;
+        } else {
+            handleRandomEvent();
+        }
         updateAllUI();
     }
     
     function init() {
         state = {
             day: 1, cash: CONFIG.INITIAL_CASH, debt: CONFIG.INITIAL_DEBT,
-            bank: 0, health: CONFIG.INITIAL_HEALTH, currentLocation: LOCATIONS[0],
+            bank: 0, health: CONFIG.INITIAL_HEALTH, currentLocation: "The Bronx",
             coatCapacity: CONFIG.TRENCH_COAT_CAPACITY, inventory: {}, prices: {},
             guns: [], wallet: { name: "Standard Wallet", ...WALLETS["Standard Wallet"] },
+            streetCred: 0, gang: "None", gangOfferMade: false
         };
         DRUGS.forEach(d => state.inventory[d.name] = 0);
         generatePrices();
@@ -980,52 +503,13 @@ document.addEventListener('DOMContentLoaded', () => {
         el.messageLog.innerHTML = '';
         logMessage("Welcome to Dope Wars. Goal: make as much money as possible in 30 days.");
         logMessage("The loan shark wants his $5,500 back. Interest is 10% per day.");
+        logMessage("Win fights and make big deals to build your Street Cred.");
     }
 
-    function endGame(isDead = false) {
-        const finalWorth = state.cash + state.bank - state.debt;
-        let title = "Time's Up!",
-            message;
-        if (isDead) {
-            title = "You Died!";
-            message = "Your violent life has come to a violent end.";
-        } else {
-            message = `After 30 days, your net worth is ${formatCurrency(finalWorth)}.`;
-            if (finalWorth < 0) message += "\n\nYou're a total failure.";
-            else if (finalWorth < 50000) message += "\n\nNot bad for a beginner.";
-            else if (finalWorth < 500000) message += "\n\nYou're a real player.";
-            else message += "\n\nYou're the undisputed kingpin of New York City!";
-            if (finalWorth > 0) {
-                const name = prompt("You made the leaderboard! Enter your name (3-10 chars):", "Player");
-                if (name && name.trim().length >= 3 && name.trim().length <= 10) {
-                    saveScore(name.trim(), finalWorth);
-                }
-            }
-        }
-        showModal(title, message, [{ text: "Play Again", action: init }]);
-    }
-
-    function saveScore(name, score) {
-        const highScores = JSON.parse(localStorage.getItem('dopewarsHighScores')) || [];
-        highScores.push({ score, name });
-        highScores.sort((a, b) => b.score - a.score);
-        highScores.splice(10);
-        localStorage.setItem('dopewarsHighScores', JSON.stringify(highScores));
-    }
-
-    function showLeaderboard() {
-        const highScores = JSON.parse(localStorage.getItem('dopewarsHighScores')) || [];
-        let leaderboardText;
-        if (highScores.length === 0) {
-            leaderboardText = "No high scores yet. Go make some money!";
-        } else {
-            leaderboardText = highScores.map((entry, index) =>
-                `${(index + 1).toString().padEnd(2, ' ')}. ${entry.name.padEnd(10, ' ')} - ${formatCurrency(entry.score)}`
-            ).join('<br>');
-        }
-        showModal('High Scores', leaderboardText, [{ text: "Close", action: closeModal }]);
-    }
-
+    function endGame(isDead = false) { const finalWorth = state.cash + state.bank - state.debt; let title = "Time's Up!", message; if (isDead) { title = "You Died!"; message = "Your violent life has come to a violent end."; } else { message = `After 30 days, your net worth is ${formatCurrency(finalWorth)}.`; if (finalWorth < 0) message += "\n\nYou're a total failure."; else if (finalWorth < 50000) message += "\n\nNot bad for a beginner."; else if (finalWorth < 500000) message += "\n\nYou're a real player."; else message += "\n\nYou're the undisputed kingpin of New York City!"; if (finalWorth > 0) { const name = prompt("You made the leaderboard! Enter your name (3-10 chars):", "Player"); if (name && name.trim().length >= 3 && name.trim().length <= 10) { saveScore(name.trim(), finalWorth); } } } showModal(title, message, [{ text: "Play Again", action: init }]); }
+    function saveScore(name, score) { const highScores = JSON.parse(localStorage.getItem('dopewarsHighScores')) || []; highScores.push({ score, name }); highScores.sort((a, b) => b.score - a.score); highScores.splice(10); localStorage.setItem('dopewarsHighScores', JSON.stringify(highScores)); }
+    function showLeaderboard() { const highScores = JSON.parse(localStorage.getItem('dopewarsHighScores')) || []; let leaderboardText; if (highScores.length === 0) { leaderboardText = "No high scores yet. Go make some money!"; } else { leaderboardText = highScores.map((entry, index) => `${(index + 1).toString().padEnd(2, ' ')}. ${entry.name.padEnd(10, ' ')} - ${formatCurrency(entry.score)}`).join('<br>'); } showModal('High Scores', leaderboardText, [{ text: "Close", action: closeModal }]); }
+    
     function skipBootSequence() {
         if (!isBooting) return;
         isBooting = false;
@@ -1037,40 +521,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function runBootSequence() {
         document.addEventListener('keydown', skipBootSequence, { once: true });
-        const bootLines = [
-            "DW-DOS v3.30", "Copyright (c) 1984, Dope Wars Inc.", " ",
-            "Memory test: 64K OK", "Initializing network...",
-            "Connecting to [ Marlboro Township, New Jersey ]...", "Connection established.",
-            "Loading DOPEWARS.EXE...", "READY.",
-        ];
+        const bootLines = [ "DW-DOS v3.30", "Copyright (c) 1984, Dope Wars Inc.", " ", "Memory test: 64K OK", "Initializing network...", "Connecting to [ Marlboro Township, New Jersey ]...", "Connection established.", "Loading DOPEWARS.EXE...", "READY.", ];
         const bootTextEl = document.getElementById('boot-text');
         let lineIndex = 0;
         function typeLine() {
             if (!isBooting) return;
             if (lineIndex < bootLines.length) {
-                const p = document.createElement('p');
-                bootTextEl.appendChild(p);
-                let charIndex = 0;
-                const line = bootLines[lineIndex];
+                const p = document.createElement('p'); bootTextEl.appendChild(p);
+                let charIndex = 0; const line = bootLines[lineIndex];
                 const typeChar = () => {
                     if (!isBooting) return;
-                    if (charIndex < line.length) {
-                        p.textContent += line.charAt(charIndex);
-                        charIndex++;
-                        setTimeout(typeChar, 20);
-                    } else {
-                        lineIndex++;
-                        setTimeout(typeLine, getRandomInt(100, 400));
-                    }
+                    if (charIndex < line.length) { p.textContent += line.charAt(charIndex); charIndex++; setTimeout(typeChar, 20); } 
+                    else { lineIndex++; setTimeout(typeLine, getRandomInt(100, 400)); }
                 };
                 typeChar();
             } else {
-                const p = document.createElement('p');
-                p.innerHTML = "EXECUTE <span class='cursor'></span>";
-                bootTextEl.appendChild(p);
-                setTimeout(() => {
-                    if (isBooting) skipBootSequence();
-                }, 1500);
+                const p = document.createElement('p'); p.innerHTML = "EXECUTE <span class='cursor'></span>"; bootTextEl.appendChild(p);
+                setTimeout(() => { if (isBooting) skipBootSequence(); }, 1500);
             }
         }
         typeLine();
